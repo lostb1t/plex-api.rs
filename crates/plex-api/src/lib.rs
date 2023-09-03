@@ -7,6 +7,7 @@
 
 //! TODO
 //!
+extern crate tokio;
 mod error;
 mod http_client;
 pub mod media_container;

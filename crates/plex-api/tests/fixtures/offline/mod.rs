@@ -3,7 +3,7 @@ pub mod myplex;
 pub mod server;
 
 use httpmock::MockServer;
-use isahc::{config::Configurable, HttpClient};
+// use isahc::{config::Configurable, HttpClient};
 use plex_api::HttpClientBuilder;
 use rstest::fixture;
 use std::ops::Deref;

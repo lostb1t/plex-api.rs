@@ -3,7 +3,7 @@ use crate::{
     Error, HttpClient, Result,
 };
 use http::StatusCode;
-use isahc::AsyncReadResponseExt;
+// use isahc::AsyncReadResponseExt;
 use serde::Deserialize;
 use time::OffsetDateTime;
 

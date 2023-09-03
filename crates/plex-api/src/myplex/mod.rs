@@ -22,7 +22,7 @@ use crate::{
     Error, Result,
 };
 use http::StatusCode;
-use isahc::AsyncBody;
+// use isahc::AsyncBody;
 use secrecy::{ExposeSecret, SecretString};
 
 #[derive(Debug, Clone)]
@@ -57,9 +57,7 @@ impl MyPlex {
         for (key, value) in extra_params {
             params.push((key, value));
         }
-
-        Self::build_from_signin_response(&client, client.post(MYPLEX_SIGNIN_PATH).form(&params)?)
-            .await
+        Self::build_from_signin_response(&client, client.post(MYPLEX_SIGNIN_PATH).form(&params)?).await
     }
 
     #[tracing::instrument(level = "debug", skip(password, client))]
@@ -95,18 +93,30 @@ impl MyPlex {
 
         Self::build_from_signin_response(
             &self.client,
-            self.client.get(MYPLEX_USER_INFO_PATH).body(())?,
+            self.client.get(MYPLEX_USER_INFO_PATH).build()?,
         )
         .await
     }
 
-    async fn build_from_signin_response<B>(
+    // async fn build_from_signin_response<B>(
+    //     client: &HttpClient,
+    //     request: Request<'_,>,
+    // ) -> Result<Self>
+    // where
+    //     B: Into<AsyncBody>,
+    // {
+    //     let account: account::MyPlexAccount = request.json().await?;
+    //     Ok(Self {
+    //         client: client.clone().set_x_plex_token(account.auth_token.clone()),
+    //         account: Some(account),
+    //     })
+    // }
+    
+    async fn build_from_signin_response(
+    // async fn build_from_signin_response<B>(
         client: &HttpClient,
-        request: Request<'_, B>,
-    ) -> Result<Self>
-    where
-        B: Into<AsyncBody>,
-    {
+        request: Request<'_,>,
+    ) -> Result<Self> {
         let account: account::MyPlexAccount = request.json().await?;
         Ok(Self {
             client: client.clone().set_x_plex_token(account.auth_token.clone()),
@@ -215,7 +225,6 @@ impl MyPlex {
         let response = self
             .client
             .delete(MYPLEX_SIGNOUT_PATH)
-            .body(())?
             .send()
             .await?;
 

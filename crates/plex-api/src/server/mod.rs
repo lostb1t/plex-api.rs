@@ -28,7 +28,7 @@ use crate::{
 use core::convert::TryFrom;
 use futures::AsyncWrite;
 use http::{StatusCode, Uri};
-use isahc::AsyncReadResponseExt;
+// use isahc::AsyncReadResponseExt;
 use std::{
     collections::HashMap,
     fmt::{self, Debug},
@@ -148,7 +148,7 @@ impl Server {
         writer: W,
     ) -> Result<()>
     where
-        W: AsyncWrite + Unpin,
+        W: AsyncWrite + tokio::io::AsyncWrite + Unpin,
     {
         transcode_artwork(&self.client, art, width, height, options, writer).await
     }
@@ -276,7 +276,7 @@ impl Server {
         let mut response = self.client.post(url).send().await?;
 
         if response.status() == StatusCode::OK {
-            response.consume().await?;
+            // response.consume().await?;
             self.refresh().await
         } else {
             Err(crate::Error::from_response(response).await)
@@ -288,7 +288,7 @@ impl Server {
         let mut response = self.client.delete(SERVER_MYPLEX_ACCOUNT).send().await?;
 
         if response.status() == StatusCode::OK {
-            response.consume().await?;
+            // response.consume().await?;
             self.refresh().await
         } else {
             Err(crate::Error::from_response(response).await)

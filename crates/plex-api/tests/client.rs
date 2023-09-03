@@ -3,7 +3,7 @@ mod fixtures;
 mod offline {
     use super::fixtures::offline::mock_server;
     use httpmock::{Method::GET, MockServer};
-    use isahc::HttpClient;
+    // use isahc::HttpClient;
     use plex_api::HttpClientBuilder;
     use std::time::Duration;
 

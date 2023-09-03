@@ -1,6 +1,6 @@
 use crate::{http_client::HttpClient, url::MYPLEX_CLAIM_TOKEN_PATH, Error, Result};
 use http::StatusCode;
-use isahc::AsyncReadResponseExt;
+// use isahc::AsyncReadResponseExt;
 use serde::{Deserialize, Serialize};
 use time::{Duration, OffsetDateTime};
 

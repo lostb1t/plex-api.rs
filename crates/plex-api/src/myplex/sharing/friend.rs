@@ -2,7 +2,7 @@ use crate::{
     myplex::account::RestrictionProfile, url::MYPLEX_INVITES_FRIENDS, Error, HttpClient, Result,
 };
 use http::StatusCode;
-use isahc::AsyncReadResponseExt;
+// use isahc::AsyncReadResponseExt;
 use serde::{Deserialize, Serialize};
 use serde_plain::derive_display_from_serialize;
 use time::OffsetDateTime;
@@ -100,7 +100,7 @@ impl Friend {
 
         match response.status() {
             StatusCode::OK | StatusCode::NO_CONTENT => {
-                response.consume().await?;
+                // response.consume().await?;
                 Ok(())
             }
             _ => Err(Error::from_response(response).await),

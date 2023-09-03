@@ -14,10 +14,12 @@ use std::fmt::Display;
 
 use futures::AsyncWrite;
 use http::StatusCode;
-use isahc::AsyncReadResponseExt;
+// use isahc::AsyncReadResponseExt;
 use serde::{Deserialize, Serialize};
 use serde_plain::derive_display_from_serialize;
 use uuid::Uuid;
+use tokio_util::compat::FuturesAsyncReadCompatExt;
+use futures::stream::TryStreamExt;
 
 use crate::{
     error,
@@ -656,10 +658,11 @@ async fn transcode_decision<'a, M: MediaItemWithTranscoding>(
             if let Some(text) = wrapper.media_container.transcode_decision_text {
                 error::Error::TranscodeError(text)
             } else {
-                error::Error::UnexpectedApiResponse {
-                    status_code: response.status().as_u16(),
-                    content: text,
-                }
+                error::Error::TranscodeError("sup".to_string())
+                // error::Error::UnexpectedApiResponse {
+                //     status_code: response.status().as_u16(),
+                //     content: text,
+                // }
             }
         })
 }
@@ -866,9 +869,9 @@ impl TranscodeSession {
     /// more sense to wait until the transcode is complete or nearly complete
     /// before attempting download.
     #[tracing::instrument(level = "debug", skip_all)]
-    pub async fn download<W>(&self, writer: W) -> Result<()>
+    pub async fn download<W>(&self, mut writer: W) -> Result<()>
     where
-        W: AsyncWrite + Unpin,
+        W: AsyncWrite + Unpin + tokio::io::AsyncWrite,
     {
         // Strictly speaking it doesn't appear that the requested extension
         // matters but we'll attempt to match other clients anyway.
@@ -888,12 +891,55 @@ impl TranscodeSession {
 
         match response.status() {
             StatusCode::OK => {
-                response.copy_to(writer).await?;
+                // Convert the body of the response into a futures::io::Stream.
+                let download = response.bytes_stream();
+                
+                // Convert the stream into an futures::io::AsyncRead.
+                // We must first convert the reqwest::Error into an futures::io::Error.
+                let download = download
+                    .map_err(|e| futures::io::Error::new(futures::io::ErrorKind::Other, e))
+                    .into_async_read();
+                
+                // // Convert the futures::io::AsyncRead into a tokio::io::AsyncRead.
+                let mut download = download.compat();
+                
+                // Invoke tokio::io::copy to actually perform the download.
+                tokio::io::copy(&mut download, &mut writer).await?;
                 Ok(())
             }
             _ => Err(crate::Error::from_response(response).await),
         }
     }
+
+    // #[tracing::instrument(level = "debug", skip_all)]
+    // pub async fn download<W>(&self, writer: W) -> Result<()>
+    // where
+    //     W: AsyncWrite + Unpin,
+    // {
+    //     // Strictly speaking it doesn't appear that the requested extension
+    //     // matters but we'll attempt to match other clients anyway.
+    //     let ext = match (self.protocol, self.container) {
+    //         (Protocol::Dash, _) => "mpd".to_string(),
+    //         (Protocol::Hls, _) => "m3u8".to_string(),
+    //         (_, container) => container.to_string(),
+    //     };
+
+    //     let path = format!("{SERVER_TRANSCODE_DOWNLOAD}/start.{}?{}", ext, self.params);
+
+    //     let mut builder = self.client.get(path);
+    //     if self.offline {
+    //         builder = builder.timeout(None)
+    //     }
+    //     let mut response = builder.send().await?;
+
+    //     match response.status() {
+    //         StatusCode::OK => {
+    //             response.copy_to(writer).await?;
+    //             Ok(())
+    //         }
+    //         _ => Err(crate::Error::from_response(response).await),
+    //     }
+    // }
 
     #[tracing::instrument(level = "debug", skip_all)]
     pub async fn status(&self) -> Result<TranscodeStatus> {
@@ -937,10 +983,30 @@ impl TranscodeSession {
         match response.status() {
             // Sometimes the server will respond not found but still cancel the
             // session.
-            StatusCode::OK | StatusCode::NOT_FOUND => Ok(response.consume().await?),
+            StatusCode::OK | StatusCode::NOT_FOUND => Ok(()),
             _ => Err(crate::Error::from_response(response).await),
         }
     }
+
+    // #[tracing::instrument(level = "debug", skip_all)]
+    // pub async fn cancel(self) -> Result<()> {
+    //     let mut response = self
+    //         .client
+    //         .get(format!(
+    //             "/video/:/transcode/universal/stop?session={}",
+    //             self.id
+    //         ))
+    //         .send()
+    //         .await?;
+
+    //     match response.status() {
+    //         // Sometimes the server will respond not found but still cancel the
+    //         // session.
+    //         StatusCode::OK | StatusCode::NOT_FOUND => Ok(response.consume().await?),
+    //         _ => Err(crate::Error::from_response(response).await),
+    //     }
+    // }
+
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -968,10 +1034,10 @@ pub(crate) async fn transcode_artwork<W>(
     width: u32,
     height: u32,
     options: ArtTranscodeOptions,
-    writer: W,
+    mut writer: W,
 ) -> Result<()>
 where
-    W: AsyncWrite + Unpin,
+    W: AsyncWrite + Unpin + tokio::io::AsyncWrite,
 {
     let query = Query::new()
         .param("url", art)
@@ -989,9 +1055,25 @@ where
         // Sometimes the server will respond not found but still cancel the
         // session.
         StatusCode::OK => {
-            response.copy_to(writer).await?;
+            // Convert the body of the response into a futures::io::Stream.
+            let download = response.bytes_stream();
+            
+            // Convert the stream into an futures::io::AsyncRead.
+            // We must first convert the reqwest::Error into an futures::io::Error.
+            let download = download
+                .map_err(|e| futures::io::Error::new(futures::io::ErrorKind::Other, e))
+                .into_async_read();
+            
+            // // Convert the futures::io::AsyncRead into a tokio::io::AsyncRead.
+            let mut download = download.compat();
+            
+            // Invoke tokio::io::copy to actually perform the download.
+            tokio::io::copy(&mut download, &mut writer).await?;
             Ok(())
         }
         _ => Err(crate::Error::from_response(response).await),
     }
 }
+
+
+

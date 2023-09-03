@@ -1,12 +1,12 @@
 use crate::{url::MYPLEX_DEFAULT_API_URL, Result};
 use core::convert::TryFrom;
 use http::{uri::PathAndQuery, HeaderValue, StatusCode, Uri};
-use isahc::{
-    config::{Configurable, RedirectPolicy},
-    http::request::Builder,
-    AsyncBody, AsyncReadResponseExt, HttpClient as IsahcHttpClient, Request as HttpRequest,
-    Response as HttpResponse,
-};
+// use isahc::{
+//     config::{Configurable, RedirectPolicy},
+//     http::request::Builder,
+//     AsyncBody, AsyncReadResponseExt, HttpClient as IsahcHttpClient, Request as HttpRequest,
+//     Response as HttpResponse,
+// };
 use secrecy::{ExposeSecret, SecretString};
 use serde::{de::DeserializeOwned, Serialize};
 use std::time::Duration;
@@ -20,7 +20,8 @@ const DEFAULT_CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
 pub struct HttpClient {
     pub api_url: Uri,
 
-    pub http_client: IsahcHttpClient,
+    // pub http_client: IsahcHttpClient,
+    pub http_client: reqwest::Client,
 
     /// `X-Plex-Provides` header value. Comma-separated list.
     ///
@@ -91,8 +92,8 @@ pub struct HttpClient {
 }
 
 impl HttpClient {
-    fn prepare_request(&self) -> Builder {
-        self.prepare_request_min()
+    fn prepare_request(&self, mut req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        self.prepare_request_min(req)
             .header("X-Plex-Provides", &self.x_plex_provides)
             .header("X-Plex-Platform", &self.x_plex_platform)
             .header("X-Plex-Platform-Version", &self.x_plex_platform_version)
@@ -105,22 +106,21 @@ impl HttpClient {
             .header("X-Plex-Features", &self.x_plex_features)
     }
 
-    fn prepare_request_min(&self) -> Builder {
-        let mut request = HttpRequest::builder()
-            .header("X-Plex-Client-Identifier", &self.x_plex_client_identifier);
+    fn prepare_request_min(&self, mut req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        req = req.header("X-Plex-Client-Identifier", &self.x_plex_client_identifier);
 
         if !self.x_plex_target_client_identifier.is_empty() {
-            request = request.header(
+            req = req.header(
                 "X-Plex-Target-Client-Identifier",
                 &self.x_plex_target_client_identifier,
             );
         }
 
         if !self.x_plex_token.expose_secret().is_empty() {
-            request = request.header("X-Plex-Token", self.x_plex_token.expose_secret());
+            req = req.header("X-Plex-Token", self.x_plex_token.expose_secret());
         }
 
-        request
+        req
     }
 
     /// Verifies that this client has an authentication token.
@@ -131,14 +131,18 @@ impl HttpClient {
     /// Begins building a request using the HTTP POST method.
     pub fn post<T>(&self, path: T) -> RequestBuilder<'_, T>
     where
+        T: std::fmt::Debug + std::clone::Clone,
         PathAndQuery: TryFrom<T>,
         <PathAndQuery as TryFrom<T>>::Error: Into<http::Error>,
     {
         RequestBuilder {
             http_client: &self.http_client,
             base_url: self.api_url.clone(),
-            path_and_query: path,
-            request_builder: self.prepare_request().method("POST"),
+            path_and_query: path.clone(),
+            request_builder: self.prepare_request(
+                self.http_client
+                    .post(format!("{:?}{:?}", self.api_url.clone(), path)),
+            ),
             timeout: Some(DEFAULT_TIMEOUT),
         }
     }
@@ -147,14 +151,18 @@ impl HttpClient {
     /// headers: `X-Plex-Client-Identifier` and `X-Plex-Token`.
     pub fn postm<T>(&self, path: T) -> RequestBuilder<'_, T>
     where
+        T: std::fmt::Debug + std::clone::Clone,
         PathAndQuery: TryFrom<T>,
         <PathAndQuery as TryFrom<T>>::Error: Into<http::Error>,
     {
         RequestBuilder {
             http_client: &self.http_client,
             base_url: self.api_url.clone(),
-            path_and_query: path,
-            request_builder: self.prepare_request_min().method("POST"),
+            path_and_query: path.clone(),
+            request_builder: self.prepare_request_min(
+                self.http_client
+                    .post(format!("{:?}{:?}", self.api_url.clone(), path)),
+            ),
             timeout: Some(DEFAULT_TIMEOUT),
         }
     }
@@ -162,14 +170,18 @@ impl HttpClient {
     /// Begins building a request using the HTTP GET method.
     pub fn get<T>(&self, path: T) -> RequestBuilder<'_, T>
     where
+        T: std::fmt::Debug + std::clone::Clone,
         PathAndQuery: TryFrom<T>,
         <PathAndQuery as TryFrom<T>>::Error: Into<http::Error>,
     {
         RequestBuilder {
             http_client: &self.http_client,
             base_url: self.api_url.clone(),
-            path_and_query: path,
-            request_builder: self.prepare_request().method("GET"),
+            path_and_query: path.clone(),
+            request_builder: self.prepare_request(
+                self.http_client
+                    .get(format!("{:?}{:?}", self.api_url.clone(), path)),
+            ),
             timeout: Some(DEFAULT_TIMEOUT),
         }
     }
@@ -178,14 +190,18 @@ impl HttpClient {
     /// headers: `X-Plex-Client-Identifier` and `X-Plex-Token`.
     pub fn getm<T>(&self, path: T) -> RequestBuilder<'_, T>
     where
+        T: std::fmt::Debug + std::clone::Clone,
         PathAndQuery: TryFrom<T>,
         <PathAndQuery as TryFrom<T>>::Error: Into<http::Error>,
     {
         RequestBuilder {
             http_client: &self.http_client,
             base_url: self.api_url.clone(),
-            path_and_query: path,
-            request_builder: self.prepare_request_min().method("GET"),
+            path_and_query: path.clone(),
+            request_builder: self.prepare_request_min(
+                self.http_client
+                    .get(format!("{:?}{:?}", self.api_url.clone(), path)),
+            ),
             timeout: Some(DEFAULT_TIMEOUT),
         }
     }
@@ -193,14 +209,18 @@ impl HttpClient {
     /// Begins building a request using the HTTP PUT method.
     pub fn put<T>(&self, path: T) -> RequestBuilder<'_, T>
     where
+        T: std::fmt::Debug + std::clone::Clone,
         PathAndQuery: TryFrom<T>,
         <PathAndQuery as TryFrom<T>>::Error: Into<http::Error>,
     {
         RequestBuilder {
             http_client: &self.http_client,
             base_url: self.api_url.clone(),
-            path_and_query: path,
-            request_builder: self.prepare_request().method("PUT"),
+            path_and_query: path.clone(),
+            request_builder: self.prepare_request(
+                self.http_client
+                    .put(format!("{:?}{:?}", self.api_url.clone(), path)),
+            ),
             timeout: Some(DEFAULT_TIMEOUT),
         }
     }
@@ -209,14 +229,18 @@ impl HttpClient {
     /// headers: `X-Plex-Client-Identifier` and `X-Plex-Token`.
     pub fn putm<T>(&self, path: T) -> RequestBuilder<'_, T>
     where
+        T: std::fmt::Debug + std::clone::Clone,
         PathAndQuery: TryFrom<T>,
         <PathAndQuery as TryFrom<T>>::Error: Into<http::Error>,
     {
         RequestBuilder {
             http_client: &self.http_client,
             base_url: self.api_url.clone(),
-            path_and_query: path,
-            request_builder: self.prepare_request_min().method("PUT"),
+            path_and_query: path.clone(),
+            request_builder: self.prepare_request_min(
+                self.http_client
+                    .put(format!("{:?}{:?}", self.api_url.clone(), path)),
+            ),
             timeout: Some(DEFAULT_TIMEOUT),
         }
     }
@@ -224,14 +248,18 @@ impl HttpClient {
     /// Begins building a request using the HTTP DELETE method.
     pub fn delete<T>(&self, path: T) -> RequestBuilder<'_, T>
     where
+        T: std::fmt::Debug + std::clone::Clone,
         PathAndQuery: TryFrom<T>,
         <PathAndQuery as TryFrom<T>>::Error: Into<http::Error>,
     {
         RequestBuilder {
             http_client: &self.http_client,
             base_url: self.api_url.clone(),
-            path_and_query: path,
-            request_builder: self.prepare_request().method("DELETE"),
+            path_and_query: path.clone(),
+            request_builder: self.prepare_request(
+                self.http_client
+                    .delete(format!("{:?}{:?}", self.api_url.clone(), path)),
+            ),
             timeout: Some(DEFAULT_TIMEOUT),
         }
     }
@@ -240,14 +268,23 @@ impl HttpClient {
     /// headers: `X-Plex-Client-Identifier` and `X-Plex-Token`.
     pub fn deletem<T>(&self, path: T) -> RequestBuilder<'_, T>
     where
+        T: std::fmt::Debug + std::clone::Clone,
         PathAndQuery: TryFrom<T>,
         <PathAndQuery as TryFrom<T>>::Error: Into<http::Error>,
     {
         RequestBuilder {
             http_client: &self.http_client,
             base_url: self.api_url.clone(),
-            path_and_query: path,
-            request_builder: self.prepare_request_min().method("DELETE"),
+            path_and_query: path.clone(),
+            request_builder: self.prepare_request_min(
+                self.http_client
+                    .delete(format!("{:?}{:?}", self.api_url.clone(), path)),
+            ),
+            //method: reqwest::Method::Delete,
+            // request_builder: self.prepare_request_min(
+            //     self.http_client
+            //         .delete(self.build_uri(self.api_url.clone(), path)),
+            // ),
             timeout: Some(DEFAULT_TIMEOUT),
         }
     }
@@ -262,6 +299,17 @@ impl HttpClient {
             ..self
         }
     }
+
+    // pub fn build_uri<T>(&self, base_url: Uri, path_and_query: T) -> Uri
+    // where
+    //     PathAndQuery: TryFrom<T>,
+    //     <PathAndQuery as TryFrom<T>>::Error: Into<http::Error>,
+    // {
+    //     let path_and_query = PathAndQuery::try_from(path_and_query).map_err(Into::into)?;
+    //     let mut uri_parts = base_url.into_parts();
+    //     uri_parts.path_and_query = Some(path_and_query);
+    //     Uri::from_parts(uri_parts).map_err(Into::<http::Error>::into)?
+    // }
 
     /// Get a reference to the client's authentication token.
     pub fn x_plex_token(&self) -> &str {
@@ -280,11 +328,12 @@ where
     PathAndQuery: TryFrom<P>,
     <PathAndQuery as TryFrom<P>>::Error: Into<http::Error>,
 {
-    http_client: &'a IsahcHttpClient,
+    http_client: &'a reqwest::Client,
     base_url: Uri,
     path_and_query: P,
-    request_builder: Builder,
+    request_builder: reqwest::RequestBuilder,
     timeout: Option<Duration>,
+    //method: reqwest::Method
 }
 
 impl<'a, P> RequestBuilder<'a, P>
@@ -305,42 +354,43 @@ where
     }
 
     /// Adds a body to the request.
-    pub fn body<B>(self, body: B) -> Result<Request<'a, B>>
+    // pub fn body<B>(self, body: B) -> Result<Request<'a, B>>
+    // pub fn body(self, body: reqwest::Body) -> Result<Request<'a>> {
+    pub fn body<B>(self, body: B) -> Result<Request<'a>>
     where
-        B: Into<AsyncBody>,
+        B: Into<reqwest::Body>,
     {
-        let path_and_query = PathAndQuery::try_from(self.path_and_query).map_err(Into::into)?;
-        let mut uri_parts = self.base_url.into_parts();
-        uri_parts.path_and_query = Some(path_and_query);
-        let uri = Uri::from_parts(uri_parts).map_err(Into::<http::Error>::into)?;
-
-        let mut builder = self.request_builder.uri(uri);
-        if let Some(timeout) = self.timeout {
-            builder = builder.timeout(timeout);
-        }
-
         Ok(Request {
             http_client: self.http_client,
-            request: builder.body(body)?,
+            request: self.request_builder.body(body).build()?,
+        })
+    }
+
+    pub fn build(self) -> Result<Request<'a>> {
+        Ok(Request {
+            http_client: self.http_client,
+            request: self.request_builder.build()?,
         })
     }
 
     /// Serializes the provided struct as json and adds it as a body for the request.
     /// Header "Content-type: application/json" will be added along the way.
-    pub fn json_body<B>(self, body: &B) -> Result<Request<'a, String>>
+    pub fn json_body<B>(self, body: &B) -> Result<Request<'a>>
     where
         B: ?Sized + Serialize,
     {
         self.header("Content-type", "application/json")
             .body(serde_json::to_string(body)?)
+            // .build()
     }
 
     /// Adds a form encoded parameters to the request body.
-    pub fn form(self, params: &[(&str, &str)]) -> Result<Request<'a, String>> {
+    pub fn form(self, params: &[(&str, &str)]) -> Result<Request<'a>> {
         let body = serde_urlencoded::to_string(params)?;
         self.header("Content-type", "application/x-www-form-urlencoded")
             .header("Content-Length", body.len().to_string())
             .body(body)
+            // .build()
     }
 
     /// Adds a request header.
@@ -362,18 +412,38 @@ where
     }
 
     /// Sends this request generating a response.
-    pub async fn send(self) -> Result<HttpResponse<AsyncBody>> {
-        self.body(())?.send().await
+    pub async fn send(self) -> Result<reqwest::Response, reqwest::Error> {
+        // self.build().unwrap().request.execute().await?
+        // self.http_client.execute(self.build().unwrap().request).await
+        self.build().unwrap().send().await
+        // Request {
+        //     http_client: self.http_client,
+        //     request: self.request_builder.build(),
+        // }
+        //self.body(()).unwrap().send().await
+        // Self {
+        //     self.request_builder.send().await
+        // }
+        // Ok(Request {
+        //     http_client: self.http_client,
+        //     request: builder.body(body)?,
+        // })
     }
+    // pub async fn send(self) -> Result<HttpResponse<AsyncBody>> {
+    //     self.body(())?.send().await
+    // }
 
     /// Sends this request and attempts to decode the response as JSON.
     pub async fn json<T: DeserializeOwned + Unpin>(self) -> Result<T> {
-        self.body(())?.json().await
+        self.build().unwrap().json().await
+        // self.http_client.execute(self.build().unwrap().request).await?.
+        // self.body(())?.json().await
     }
 
     /// Sends this request and attempts to decode the response as XML.
     pub async fn xml<T: DeserializeOwned + Unpin>(self) -> Result<T> {
-        self.body(())?.xml().await
+        self.build().unwrap().xml().await
+        // self.body(())?.xml().await
     }
 
     /// Sends this request, verifies success and then consumes any response.
@@ -382,27 +452,49 @@ where
 
         match response.status() {
             StatusCode::OK => {
-                response.consume().await?;
+                response;
                 Ok(())
             }
-            _ => Err(crate::Error::from_response(response).await),
+            _ => Err(crate::Error::UnexpectedError),
+            // _ => Err(crate::Error::from_response(response).await),
         }
     }
+    // pub async fn consume(self) -> Result<()> {
+    //     let mut response = self.header("Accept", "application/json").send().await?;
+
+    //     match response.status() {
+    //         StatusCode::OK => {
+    //             response.consume().await?;
+    //             Ok(())
+    //         }
+    //         _ => Err(crate::Error::from_response(response).await),
+    //     }
+    // }
 }
 
-pub struct Request<'a, T> {
-    http_client: &'a IsahcHttpClient,
-    request: HttpRequest<T>,
+// pub struct Request<'a, T> {
+//     http_client: &'a reqwest::Client,
+//     request: HttpRequest<T>,
+// }
+
+pub struct Request<'a> {
+    http_client: &'a reqwest::Client,
+    request: reqwest::Request,
 }
 
-impl<'a, T> Request<'a, T>
-where
-    T: Into<AsyncBody>,
-{
+// impl<'a, T> Request<'a, T>
+// where
+//     T: Into<AsyncBody>,
+// {
+impl<'a> Request<'a> {
     /// Sends this request generating a response.
-    pub async fn send(self) -> Result<HttpResponse<AsyncBody>> {
-        Ok(self.http_client.send_async(self.request).await?)
+    pub async fn send(self) -> Result<reqwest::Response, reqwest::Error> {
+        Ok(self.http_client.execute(self.request).await?)
     }
+
+    // pub async fn send(self) -> Result<HttpResponse<AsyncBody>> {
+    //     // Ok(self.http_client.send_async(self.request).await?)
+    // }
 
     /// Sends this request and attempts to decode the response as JSON.
     pub async fn json<R: DeserializeOwned + Unpin>(mut self) -> Result<R> {
@@ -410,25 +502,26 @@ where
         headers.insert("Accept", HeaderValue::from_static("application/json"));
 
         let mut response = self.send().await?;
+        Ok(response.json::<R>().await?)
 
-        match response.status() {
-            StatusCode::OK | StatusCode::CREATED | StatusCode::ACCEPTED => {
-                let body = response.text().await?;
-                match serde_json::from_str(&body) {
-                    Ok(response) => Ok(response),
-                    Err(error) => {
-                        #[cfg(feature = "tests_deny_unknown_fields")]
-                        // We're in tests, so it's fine to print
-                        #[allow(clippy::print_stdout)]
-                        {
-                            println!("Received body: {body}");
-                        }
-                        Err(error.into())
-                    }
-                }
-            }
-            _ => Err(crate::Error::from_response(response).await),
-        }
+        // match response.status() {
+        //     StatusCode::OK | StatusCode::CREATED | StatusCode::ACCEPTED => {
+        //         let body = response.text().await?;
+        //         match serde_json::from_str(&body) {
+        //             Ok(response) => Ok(response),
+        //             Err(error) => {
+        //                 #[cfg(feature = "tests_deny_unknown_fields")]
+        //                 // We're in tests, so it's fine to print
+        //                 #[allow(clippy::print_stdout)]
+        //                 {
+        //                     println!("Received body: {body}");
+        //                 }
+        //                 Err(error.into())
+        //             }
+        //         }
+        //     }
+        //     _ => Err(crate::Error::from_response(response).await),
+        // }
     }
 
     /// Sends this request and attempts to decode the response as XML.
@@ -474,11 +567,16 @@ impl Default for HttpClientBuilder {
 
         let client = HttpClient {
             api_url: Uri::from_static(MYPLEX_DEFAULT_API_URL),
-            http_client: IsahcHttpClient::builder()
+            http_client: reqwest::Client::builder()
                 .connect_timeout(DEFAULT_CONNECTION_TIMEOUT)
-                .redirect_policy(RedirectPolicy::None)
+                // .redirect_policy(RedirectPolicy::None)
                 .build()
                 .expect("failed to create default http client"),
+            // http_client: IsahcHttpClient::builder()
+            //     .connect_timeout(DEFAULT_CONNECTION_TIMEOUT)
+            //     .redirect_policy(RedirectPolicy::None)
+            //     .build()
+            //     .expect("failed to create default http client"),
             x_plex_provides: String::from("controller"),
             x_plex_product: option_env!("CARGO_PKG_NAME")
                 .unwrap_or("plex-api")
@@ -513,7 +611,7 @@ impl HttpClientBuilder {
         self.client
     }
 
-    pub fn set_http_client(self, http_client: IsahcHttpClient) -> Self {
+    pub fn set_http_client(self, http_client: reqwest::Client) -> Self {
         Self {
             client: self.client.map(move |mut client| {
                 client.http_client = http_client;

@@ -3,7 +3,8 @@ use std::{marker::PhantomData, ops::RangeBounds};
 use enum_dispatch::enum_dispatch;
 use futures::AsyncWrite;
 use http::StatusCode;
-use isahc::AsyncReadResponseExt;
+use tokio_util::compat::FuturesAsyncReadCompatExt;
+use futures::stream::TryStreamExt;
 
 use crate::{
     media_container::{
@@ -207,9 +208,9 @@ impl<'a, M: MediaItem> Part<'a, M> {
     ///
     /// Configured timeout value will be ignored during downloading.
     #[tracing::instrument(level = "debug", skip_all)]
-    pub async fn download<W, R>(&self, writer: W, range: R) -> Result
+    pub async fn download<W, R>(&self, mut writer: W, range: R) -> Result
     where
-        W: AsyncWrite + Unpin,
+        W: AsyncWrite + tokio::io::AsyncWrite + Unpin,
         R: RangeBounds<u64>,
     {
         let path = format!("{}?download=1", self.part.key.as_ref().unwrap());
@@ -236,7 +237,21 @@ impl<'a, M: MediaItem> Part<'a, M> {
         let mut response = builder.send().await?;
         match response.status() {
             StatusCode::OK | StatusCode::PARTIAL_CONTENT => {
-                response.copy_to(writer).await?;
+                // response.copy_to(writer).await?;
+                // Convert the body of the response into a futures::io::Stream.
+                let download = response.bytes_stream();
+                
+                // Convert the stream into an futures::io::AsyncRead.
+                // We must first convert the reqwest::Error into an futures::io::Error.
+                let download = download
+                    .map_err(|e| futures::io::Error::new(futures::io::ErrorKind::Other, e))
+                    .into_async_read();
+                
+                // // Convert the futures::io::AsyncRead into a tokio::io::AsyncRead.
+                let mut download = download.compat();
+                
+                // Invoke tokio::io::copy to actually perform the download.
+                tokio::io::copy(&mut download, &mut writer).await?;
                 Ok(())
             }
             _ => Err(crate::Error::from_response(response).await),

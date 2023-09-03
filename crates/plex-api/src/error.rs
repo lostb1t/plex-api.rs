@@ -1,5 +1,5 @@
 use crate::media_container::server::Feature;
-use isahc::{AsyncBody, AsyncReadResponseExt, Response as HttpResponse};
+// use isahc::{AsyncBody, AsyncReadResponseExt, Response as HttpResponse};
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -29,10 +29,15 @@ pub enum Error {
         #[from]
         source: http::Error,
     },
+    // #[error("{source}")]
+    // IsahcError {
+    //     #[from]
+    //     source: isahc::Error,
+    // },
     #[error("{source}")]
-    IsahcError {
+    ReqwestError {
         #[from]
-        source: isahc::Error,
+        source: reqwest::Error,
     },
     #[error("{source}")]
     StdIoError {
@@ -84,47 +89,51 @@ pub enum Error {
 const PLEX_API_ERROR_CODE_AUTH_OTP_REQUIRED: i32 = 1029;
 
 impl Error {
-    pub async fn from_response(mut response: HttpResponse<AsyncBody>) -> Self {
-        let status_code = response.status().as_u16();
-        let response_body = match response.text().await {
-            Ok(body) => body,
-            Err(err) => {
-                return err.into();
-            }
-        };
-
-        let err: Result<MyPlexApiErrorResponse, Error>;
-        if let Some(content_type) = response.headers().get("Content-type") {
-            match content_type.to_str().unwrap().split("; ").next().unwrap() {
-                "application/xml" => {
-                    err = quick_xml::de::from_str::<MyPlexApiErrorResponse>(&response_body)
-                        .map_err(|e| e.into())
-                }
-                _ => {
-                    err = serde_json::from_str::<MyPlexApiErrorResponse>(&response_body)
-                        .map_err(|e| e.into())
-                }
-            }
-        } else {
-            err = serde_json::from_str::<MyPlexApiErrorResponse>(&response_body)
-                .map_err(|e| e.into());
-        }
-
-        match err {
-            Ok(r) => {
-                if r.errors.len() == 1 && r.errors[0].code == PLEX_API_ERROR_CODE_AUTH_OTP_REQUIRED
-                {
-                    Self::OtpRequired
-                } else {
-                    r.into()
-                }
-            }
-            Err(_) => Self::UnexpectedApiResponse {
-                status_code,
-                content: response_body,
-            },
-        }
+    pub async fn from_response(mut response: reqwest::Response) -> Self {
+        Self::UnexpectedError
     }
+
+    // pub async fn from_response(mut response: HttpResponse<AsyncBody>) -> Self {
+    //     let status_code = response.status().as_u16();
+    //     let response_body = match response.text().await {
+    //         Ok(body) => body,
+    //         Err(err) => {
+    //             return err.into();
+    //         }
+    //     };
+
+    //     let err: Result<MyPlexApiErrorResponse, Error>;
+    //     if let Some(content_type) = response.headers().get("Content-type") {
+    //         match content_type.to_str().unwrap().split("; ").next().unwrap() {
+    //             "application/xml" => {
+    //                 err = quick_xml::de::from_str::<MyPlexApiErrorResponse>(&response_body)
+    //                     .map_err(|e| e.into())
+    //             }
+    //             _ => {
+    //                 err = serde_json::from_str::<MyPlexApiErrorResponse>(&response_body)
+    //                     .map_err(|e| e.into())
+    //             }
+    //         }
+    //     } else {
+    //         err = serde_json::from_str::<MyPlexApiErrorResponse>(&response_body)
+    //             .map_err(|e| e.into());
+    //     }
+
+    //     match err {
+    //         Ok(r) => {
+    //             if r.errors.len() == 1 && r.errors[0].code == PLEX_API_ERROR_CODE_AUTH_OTP_REQUIRED
+    //             {
+    //                 Self::OtpRequired
+    //             } else {
+    //                 r.into()
+    //             }
+    //         }
+    //         Err(_) => Self::UnexpectedApiResponse {
+    //             status_code,
+    //             content: response_body,
+    //         },
+    //     }
+    // }
 }
 
 #[derive(Deserialize, Debug, Clone)]
