@@ -170,7 +170,7 @@ impl HttpClient {
     /// Begins building a request using the HTTP GET method.
     pub fn get<T>(&self, path: T) -> RequestBuilder<'_, T>
     where
-        T: std::fmt::Debug + std::clone::Clone,
+        T: std::fmt::Debug + std::clone::Clone + std::fmt::Display,
         PathAndQuery: TryFrom<T>,
         <PathAndQuery as TryFrom<T>>::Error: Into<http::Error>,
     {
@@ -180,7 +180,8 @@ impl HttpClient {
             path_and_query: path.clone(),
             request_builder: self.prepare_request(
                 self.http_client
-                    .get(format!("{:?}{:?}", self.api_url.clone(), path)),
+                    // .get(format!("{}{}", self.api_url.clone(), path)),
+                    .get(self.build_uri(self.api_url.clone(), path).to_string()),
             ),
             timeout: Some(DEFAULT_TIMEOUT),
         }
@@ -190,7 +191,7 @@ impl HttpClient {
     /// headers: `X-Plex-Client-Identifier` and `X-Plex-Token`.
     pub fn getm<T>(&self, path: T) -> RequestBuilder<'_, T>
     where
-        T: std::fmt::Debug + std::clone::Clone,
+        T: std::fmt::Debug + std::clone::Clone + std::fmt::Display,
         PathAndQuery: TryFrom<T>,
         <PathAndQuery as TryFrom<T>>::Error: Into<http::Error>,
     {
@@ -200,7 +201,7 @@ impl HttpClient {
             path_and_query: path.clone(),
             request_builder: self.prepare_request_min(
                 self.http_client
-                    .get(format!("{:?}{:?}", self.api_url.clone(), path)),
+                    .get(self.build_uri(self.api_url.clone(), path).to_string()),
             ),
             timeout: Some(DEFAULT_TIMEOUT),
         }
@@ -300,16 +301,16 @@ impl HttpClient {
         }
     }
 
-    // pub fn build_uri<T>(&self, base_url: Uri, path_and_query: T) -> Uri
-    // where
-    //     PathAndQuery: TryFrom<T>,
-    //     <PathAndQuery as TryFrom<T>>::Error: Into<http::Error>,
-    // {
-    //     let path_and_query = PathAndQuery::try_from(path_and_query).map_err(Into::into)?;
-    //     let mut uri_parts = base_url.into_parts();
-    //     uri_parts.path_and_query = Some(path_and_query);
-    //     Uri::from_parts(uri_parts).map_err(Into::<http::Error>::into)?
-    // }
+    pub fn build_uri<T>(&self, base_url: Uri, path_and_query: T) -> Uri
+    where
+        PathAndQuery: TryFrom<T>,
+        <PathAndQuery as TryFrom<T>>::Error: Into<http::Error>,
+    {
+        let path_and_query = PathAndQuery::try_from(path_and_query).map_err(Into::into).unwrap();
+        let mut uri_parts = base_url.into_parts();
+        uri_parts.path_and_query = Some(path_and_query);
+        Uri::from_parts(uri_parts).map_err(Into::<http::Error>::into).unwrap()
+    }
 
     /// Get a reference to the client's authentication token.
     pub fn x_plex_token(&self) -> &str {
@@ -500,13 +501,15 @@ impl<'a> Request<'a> {
     pub async fn json<R: DeserializeOwned + Unpin>(mut self) -> Result<R> {
         let headers = self.request.headers_mut();
         headers.insert("Accept", HeaderValue::from_static("application/json"));
-
+        dbg!(&self.request);
         let mut response = self.send().await?;
+        dbg!(&response.status());
         Ok(response.json::<R>().await?)
-
+        
         // match response.status() {
         //     StatusCode::OK | StatusCode::CREATED | StatusCode::ACCEPTED => {
         //         let body = response.text().await?;
+        //         dbg!(&body);
         //         match serde_json::from_str(&body) {
         //             Ok(response) => Ok(response),
         //             Err(error) => {
