@@ -501,30 +501,27 @@ impl<'a> Request<'a> {
     pub async fn json<R: DeserializeOwned + Unpin>(mut self) -> Result<R> {
         let headers = self.request.headers_mut();
         headers.insert("Accept", HeaderValue::from_static("application/json"));
-        dbg!(&self.request);
         let mut response = self.send().await?;
-        dbg!(&response.status());
-        Ok(response.json::<R>().await?)
+        // Ok(response.json::<R>().await?)
         
-        // match response.status() {
-        //     StatusCode::OK | StatusCode::CREATED | StatusCode::ACCEPTED => {
-        //         let body = response.text().await?;
-        //         dbg!(&body);
-        //         match serde_json::from_str(&body) {
-        //             Ok(response) => Ok(response),
-        //             Err(error) => {
-        //                 #[cfg(feature = "tests_deny_unknown_fields")]
-        //                 // We're in tests, so it's fine to print
-        //                 #[allow(clippy::print_stdout)]
-        //                 {
-        //                     println!("Received body: {body}");
-        //                 }
-        //                 Err(error.into())
-        //             }
-        //         }
-        //     }
-        //     _ => Err(crate::Error::from_response(response).await),
-        // }
+        match response.status() {
+            StatusCode::OK | StatusCode::CREATED | StatusCode::ACCEPTED => {
+                let body = response.text().await?;
+                match serde_json::from_str(&body) {
+                    Ok(response) => Ok(response),
+                    Err(error) => {
+                        #[cfg(feature = "tests_deny_unknown_fields")]
+                        // We're in tests, so it's fine to print
+                        #[allow(clippy::print_stdout)]
+                        {
+                            println!("Received body: {body}");
+                        }
+                        Err(error.into())
+                    }
+                }
+            }
+            _ => Err(crate::Error::from_response(response).await),
+        }
     }
 
     /// Sends this request and attempts to decode the response as XML.
